@@ -1,5 +1,9 @@
+from email.mime import message
 import re
 from datetime import datetime
+from unittest import result
+
+from requests import session
 
 from agent.tools import register_tool, profile_tool
 
@@ -24,67 +28,34 @@ def is_valid_name(name):
 def is_valid_mobile(number):
 
     number = number.strip()
+    return bool(
+        re.fullmatch(
+            r"\d{10}",
+            number
+        )
+    )
+    
+    def is_valid_dob(dob):
+        dob = dob.strip()
+        formats = [
+            "%Y-%m-%d",
+            "%d-%m-%Y",
+            "%d/%m/%Y",
+            "%Y/%m/%d"
+            ]
 
-    if not number.isdigit():
-        return False
-
-    if len(number) == 10:
-        return True
-
-    if len(number) == 12 and number.startswith("91"):
-        return True
+        for fmt in formats:
+            try:
+                datetime.strptime(dob, fmt)
+                return True
+            except ValueError:
+                continue
 
     return False
 
-
-def is_valid_dob(dob):
-
-    try:
-        datetime.strptime(
-            dob,
-            "%Y-%m-%d"
-        )
-        return True
-
-    except ValueError:
-        return False
-
-
-# -----------------------------
-# INTENT DETECTION
-# -----------------------------
-
-def detect_intent(message):
-
-    try:
-
-        response = ollama.chat(
-            model=MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT
-                },
-                {
-                    "role": "user",
-                    "content": message
-                }
-            ]
-        )
-
-        return (
-            response["message"]["content"]
-            .strip()
-            .upper()
-        )
-
-    except Exception:
-        return "UNKNOWN"
-
-
-# -----------------------------
-# MAIN HANDLER
-# -----------------------------
+# # -----------------------------
+# # MAIN HANDLER
+# # -----------------------------
 
 def handle_message(message):
 
@@ -106,7 +77,7 @@ def handle_message(message):
         return (
             "Welcome to Toto Carrom Tournament Assistant 👋\n\n"
             "1. Register for a Tournament\n"
-            "2. Check Registration Details"
+            "2. Check Registration Details\n"
         )
 
     # ---------------------------------
@@ -148,48 +119,74 @@ def handle_message(message):
                 "Name should contain only alphabets and spaces.\n\n"
                 "Example:\n"
                 "Sakthi\n"
-                "Sakthi Kumar"
+                "John Doe"
             )
 
         session["data"]["name"] = message
         session["state"] = "WAITING_DOB"
 
-        return "Please enter Date of Birth (YYYY-MM-DD):"
-
+        return "Please enter Date of Birth:"
+    
     if session["state"] == "WAITING_DOB":
+        parsed_date = None
+        formats = [
+            "%Y-%m-%d",
+            "%d-%m-%Y",
+            "%d/%m/%Y",
+            "%Y/%m/%d"
+        ]
+        for fmt in formats:
+            try:
+                parsed_date = datetime.strptime(
+                    message.strip(),
+                    fmt
+                )
+                break
+            except ValueError:
+                pass
 
-        if not is_valid_dob(message):
-
+        if parsed_date is None:
             return (
                 "❌ Invalid Date of Birth.\n\n"
-                "Please enter DOB in YYYY-MM-DD format.\n\n"
-                "Example:\n"
-                "2003-08-15"
+                "Examples:\n"
+                "2003-08-15\n"
+                "15-08-2003\n"
+                "3-8-2003"
             )
 
-        session["data"]["dateofbirth"] = message
+        session["data"]["dateofbirth"] = parsed_date.strftime(
+            "%Y-%m-%d"
+        )
+
         session["state"] = "WAITING_MOBILE"
 
-        return (
-            "Please enter Mobile Number.\n"
-            "Accepted formats:\n"
-            "9965484873\n"
-            "919965484873"
-        )
+        return "Please enter Mobile Number."
 
     if session["state"] == "WAITING_MOBILE":
 
         if not is_valid_mobile(message):
-
             return (
                 "❌ Invalid Mobile Number.\n\n"
-                "Enter:\n"
-                "- 10 digit mobile number\n"
-                "OR\n"
-                "- 12 digits with country code (91)"
+                "Please enter exactly 10 digits.\n\n"
+                "Example:\n"
+                "9876543210"
             )
 
         session["data"]["mobilenumber"] = message
+
+        result = profile_tool(message)
+
+        if "message" not in result:
+            session["data"]["existing_registration"] = result
+            session["state"] = "WAITING_EXISTING_REGISTRATION"
+
+            return (
+                f"You have already registered for "
+                f"{result['sportregistered']}.\n\n"
+                "Do you want to make another registration?\n\n"
+                "Type Yes or No"
+            )
+
         session["state"] = "WAITING_CATEGORY"
 
         return (
@@ -199,6 +196,31 @@ def handle_message(message):
             "3. Knockout\n"
             "4. Robin"
         )
+
+    if session["state"] == "WAITING_EXISTING_REGISTRATION":
+
+        if msg == "yes":
+
+            session["state"] = "WAITING_CATEGORY"
+
+            return (
+                "Select Category:\n\n"
+                "1. Singles\n"
+                "2. Doubles\n"
+                "3. Knockout\n"
+                "4. Robin"
+            )
+
+        elif msg == "no":
+
+            session["state"] = None
+            session["data"] = {}
+
+            return "Registration cancelled."
+
+        else:
+            return "Please type Yes or No."
+    
 
     if session["state"] == "WAITING_CATEGORY":
 
