@@ -5,7 +5,6 @@ from unittest import result
 
 from requests import session
 
-
 from agent.tools import register_tool, profile_tool
 
 # -----------------------------
