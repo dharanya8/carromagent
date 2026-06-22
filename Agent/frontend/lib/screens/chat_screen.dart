@@ -17,6 +17,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   List<Message> messages = [];
 
+  bool isMobileStep = false;
+
   void scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (scrollController.hasClients) {
@@ -29,49 +31,26 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void updateStep() {
+    if (messages.isNotEmpty) {
+      String last = messages.last.text.toLowerCase();
+
+      isMobileStep =
+          last.contains("mobile") || last.contains("phone");
+    } else {
+      isMobileStep = false;
+    }
+  }
+
   void sendMessage() async {
     String text = controller.text.trim();
 
     if (text.isEmpty) return;
 
-    // Mobile number validation
-    bool isMobileStep = false;
-
-    if (messages.isNotEmpty) {
-      String lastMessage = messages.last.text.toLowerCase();
-
-      if (lastMessage.contains("mobile") ||
-          lastMessage.contains("phone")) {
-        isMobileStep = true;
-      }
-    }
-
-    if (isMobileStep) {
-      if (!RegExp(r'^\d{10}$').hasMatch(text)) {
-        setState(() {
-          messages.add(
-            Message(
-              text: "Please enter a valid 10-digit mobile number.",
-              isUser: false,
-            ),
-          );
-        });
-
-        scrollToBottom();
-        return;
-      }
-    }
-
     controller.clear();
 
-    // User Message
     setState(() {
-      messages.add(
-        Message(
-          text: text,
-          isUser: true,
-        ),
-      );
+      messages.add(Message(text: text, isUser: true));
     });
 
     scrollToBottom();
@@ -80,22 +59,15 @@ class _ChatScreenState extends State<ChatScreen> {
       String reply = await ApiService.sendMessage(text);
 
       setState(() {
-        messages.add(
-          Message(
-            text: reply,
-            isUser: false,
-          ),
-        );
+        messages.add(Message(text: reply, isUser: false));
+        updateStep();
       });
 
       scrollToBottom();
     } catch (e) {
       setState(() {
         messages.add(
-          Message(
-            text: "Server connection error.",
-            isUser: false,
-          ),
+          Message(text: "Server connection error.", isUser: false),
         );
       });
 
@@ -117,16 +89,24 @@ class _ChatScreenState extends State<ChatScreen> {
               controller: scrollController,
               itemCount: messages.length,
               itemBuilder: (context, index) {
+                final msg = messages[index];
+
                 return ChatBubble(
-                  message: messages[index].text,
-                  isUser: messages[index].isUser,
+                  message: msg.text,
+                  isUser: msg.isUser,
+                  onButtonPressed: (value) {
+                    controller.text = value;
+                    sendMessage();
+                  },
                 );
               },
             ),
           ),
+
           ChatInput(
             controller: controller,
             onSend: sendMessage,
+            isMobileStep: isMobileStep,
           ),
         ],
       ),

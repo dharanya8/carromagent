@@ -4,11 +4,13 @@ import 'package:flutter/services.dart';
 class ChatInput extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
+  final bool isMobileStep;
 
   const ChatInput({
     super.key,
     required this.controller,
     required this.onSend,
+    this.isMobileStep = false,
   });
 
   @override
@@ -22,12 +24,16 @@ class ChatInput extends StatelessWidget {
             child: TextField(
               controller: controller,
 
-              keyboardType: TextInputType.text,
+              keyboardType: isMobileStep
+                  ? TextInputType.number
+                  : TextInputType.text,
 
-              // Max 10 characters only
-              inputFormatters: [
+              inputFormatters: isMobileStep
+                  ? [
+                FilteringTextInputFormatter.digitsOnly,
                 LengthLimitingTextInputFormatter(10),
-              ],
+              ]
+                  : [],
 
               textInputAction: TextInputAction.send,
 
@@ -37,11 +43,11 @@ class ChatInput extends StatelessWidget {
                 }
               },
 
-              decoration: const InputDecoration(
-                hintText: "Type a message...",
-                border: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.black),
-                ),
+              decoration: InputDecoration(
+                hintText: isMobileStep
+                    ? "Enter 10-digit mobile number"
+                    : "Type message...",
+                border: const OutlineInputBorder(),
               ),
             ),
           ),
